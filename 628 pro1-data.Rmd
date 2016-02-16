@@ -1,0 +1,71 @@
+---
+title: "628 pro1-data"
+author: "Wenxue Zhang"
+date: "February 9, 2016"
+output: html_document
+---
+
+
+```{r}
+library(dplyr)
+# PM2.5 Data for Beijing from 2010 to 2015
+airindex <- read.csv(file="beijing_9am.csv",colClasses = "character")
+head(airindex)
+str(airindex)
+airindex$Value <- as.numeric(gsub("-999", NA, airindex$Value)) # missing value
+colnames(airindex)[8]<-"pm2.5"
+airindex$logpm2.5 <- log(airindex$pm2.5)
+airindex$Date <- paste0(airindex$Year,"-",airindex$Month,"-",airindex$Day)
+head(airindex)
+airindex$Date <- as.Date(airindex$Date, "%Y-%m-%d")
+airindex<-airindex[,-c(1,2,6,7)]
+
+dat<-read.delim("beijing2013-2015.txt",sep="")
+dayaverage<-dat %>%
+  group_by(Day,Month,Year) %>%
+  summarise(mean(Value,na.rm=T)) %>%
+  ungroup() %>%
+  arrange(Year,Month)
+colnames(dayaverage)[4]<-"daverage"
+dayaverage$Date <- paste0(dayaverage$Year,"-",dayaverage$Month,"-",dayaverage$Day)
+dayaverage$Date=gsub("-(\\d{1}$)","-0\\1",dayaverage$Date)
+dayaverage$Date=gsub("-(\\d{1}-)","-0\\1",dayaverage$Date)
+head(dayaverage)
+dayaverage$Date <- as.Date(dayaverage$Date, "%Y-%m-%d")
+dayaverage$log_daverage<-log(dayaverage$daverage)
+
+ns<-dat %>%
+  group_by(Day,Month,Year) %>%
+  summarise(sum(Value>150, na.rm=T)) %>%
+  ungroup() %>%
+  arrange(Year,Month)
+ns$Date <- paste0(ns$Year,"-",ns$Month,"-",ns$Day)
+ns$Date=gsub("-(\\d{1}$)","-0\\1",ns$Date)
+ns$Date=gsub("-(\\d{1}-)","-0\\1",ns$Date)
+head(ns)
+ns$Date <- as.Date(ns$Date, "%Y-%m-%d")
+colnames(ns)[4]<-"ns"
+
+airindex <- merge(dayaverage, airindex,by="Date")
+airindex <- merge(ns,airindex,by="Date")
+airindex <- airindex[,c(1,2,3,4,5,9,10,13,14)]
+colnames(airindex)[c(2)]<-c("Day") #size=1095
+
+write.csv(airindex,file="airindex.csv")
+
+# Industrial Average Data
+stockindex <- read.csv("PM2.5.stock.index.csv")
+stockindex[,1]=gsub("(\\d.*)/(\\d.*)/(\\d{4})","\\3-\\1-\\2",stockindex[,1])
+stockindex[,1]=gsub("-(\\d{1}$)","-0\\1",stockindex[,1])
+stockindex[,1]=gsub("-(\\d{1}-)","-0\\1",stockindex[,1])
+stockindex$Date <- as.Date(stockindex$Date)
+
+stockindex$returns <- c(0, diff(log(stockindex$Close)))
+stockindex <- stockindex[,c(1,5,8)]
+
+data <- merge(airindex, stockindex, by="Date") #size=727
+write.csv(data,file="pro1-data.csv")
+
+
+```
+
