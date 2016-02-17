@@ -66,6 +66,21 @@ stockindex <- stockindex[,c(1,5,8)]
 data <- merge(airindex, stockindex, by="Date") #size=727
 write.csv(data,file="pro1-data.csv")
 
+#s&p 500
+sp500<-read.csv("s&p 500.csv")
+sp500$Date<-gsub("(\\d.*)/(\\d.*)/(\\d{2})","\\3-\\1-\\2",sp500[,1])
+sp500$Date<-paste0(20,sp500$Date)
+sp500$Date=gsub("-(\\d{1}$)","-0\\1",sp500[,1])
+sp500$Date=gsub("-(\\d{1}-)","-0\\1",sp500[,1])
+sp500$Date<-as.Date(sp500$Date, "%Y-%m-%d")
+sp500<-sp500 %>%
+  arrange(Date)
+sp500$sp_returns <- c(0, diff(log(sp500$Close)))
+sp<-sp500[,c(1,8)]
 
+data$Date<-as.Date(data$Date)
+data_new <- merge(data,sp,by="Date") #size=703
+data_new$difference<-data_new$returns-data_new$sp_returns
+write.csv(data_new,file="pro1-data.csv")
 ```
 

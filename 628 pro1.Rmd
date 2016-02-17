@@ -1,0 +1,156 @@
+---
+title: "628 pro1"
+author: "Chenxi He, Yaqi Zhou, Wenxue Zhang"
+date: "January 27, 2016"
+output: html_document
+---
+## c.Code for analysis with documentation
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+library(ggplot2)
+library(zoo)
+library(scales)
+library(gtable)
+library(grid)
+library(vars)
+library(fUnitRoots)
+library(tseries)
+library(dplyr)
+library(lubridate)
+setwd("~/Desktop/628")
+```
+
+```{r,warning=FALSE}
+data <-read.csv("pro1-data.csv") # size=727
+
+sum_ns <- data %>%
+  group_by(Month,Year) %>%
+  summarise(sum(ns)) %>%
+  ungroup() %>%
+  arrange(Year,Month)
+colnames(sum_ns)[3]<-"ns_month"
+
+# Two plots overlapped
+draw <-function(p1,p2){
+  # extract gtable
+g1 <- ggplot_gtable(ggplot_build(p1))
+g2 <- ggplot_gtable(ggplot_build(p2))
+# overlap the panel of 2nd plot on that of 1st plot
+pp <- c(subset(g1$layout, name == "panel", se = t:r))
+g <- gtable_add_grob(g1, g2$grobs[[which(g2$layout$name == "panel")]], pp$t,pp$l, pp$b, pp$l)
+# axis tweaks
+ia <- which(g2$layout$name == "axis-l")
+ga <- g2$grobs[[ia]]
+ax <- ga$children[[2]]
+ax$widths <- rev(ax$widths)
+ax$grobs <- rev(ax$grobs)
+ax$grobs[[1]]$x <- ax$grobs[[1]]$x - unit(1, "npc") + unit(0.15, "cm")
+g <- gtable_add_cols(g, g2$widths[g2$layout[ia, ]$l], length(g$widths) - 1)
+g <- gtable_add_grob(g, ax, pp$t, length(g$widths) - 1, pp$b)
+ia <- which(g2$layout$name == "ylab")
+ga <- g2$grobs[[ia]]
+ga$rot <- 270
+g <- gtable_add_cols(g, g2$widths[g2$layout[ia, ]$l], length(g$widths) - 1)
+g <- gtable_add_grob(g, ga, pp$t, length(g$widths) - 1, pp$b)
+return (g)
+}
+
+# Granger Test
+monthly_granger=function(y=2013){
+  dy=data[year(data$Date)==y,]
+  p=c(1:12)
+  for(i in 1:12){
+    d=dy[month(dy$Date)==i,]
+    air_sec <- data.frame(airindex=ts(d$log_daverage),stockret=ts(d$returns))
+    xx=VARselect(air_sec,lag.max = 10,type = "both")
+    xxx=as.numeric(xx$selection[1])
+    vmodel<-VAR(air_sec,xxx,type = "both")
+    x=causality(vmodel,cause = "airindex")
+    p[i]=x$Instant$p.value
+  }
+  return(p)
+}
+
+# Monthly Granger for difference
+monthly_granger=function(y=2013){
+  dy=data[year(data$Date)==y,]
+  p=c(1:12)
+  for(i in 1:12){
+    d=dy[month(dy$Date)==i,]
+    air_sec <- data.frame(airindex=ts(d$log_daverage),stockret=ts(d$difference))
+    xx=VARselect(air_sec,lag.max = 10,type = "both")
+    xxx=as.numeric(xx$selection[1])
+    vmodel<-VAR(air_sec,xxx,type = "both")
+    x=causality(vmodel,cause = "airindex")
+    p[i]=x$Instant$p.value
+  }
+  return(p)
+}
+
+# negative returns
+data1<-data
+data1$neg_returns<-(-data1$returns)
+monthly_granger=function(y=2013){
+  dy=data1[year(data$Date)==y,]
+  p=c(1:12)
+  for(i in 1:12){
+    d=dy[month(dy$Date)==i,]
+    air_sec <- data.frame(airindex=ts(d$neg_returns),stockret=ts(d$difference))
+    vmodel<-VAR(air_sec,0,type = "both")
+    x=causality(vmodel,cause = "airindex")
+    p[i]=x$Instant$p.value
+  }
+  return(p)
+}
+
+
+month<-rep(1:12,3)
+year<-rep(2013:2015,each=12)
+p.value=c(monthly_granger(2013),monthly_granger(2014),monthly_granger(2015))
+a<-data.frame(month=month,p.value=p.value,pollution=sum_ns$ns_month,year=year)
+a$month<-as.factor(a$month)
+ggplot(data=a,aes(x=month,y=p.value,size=pollution,color=pollution)) + geom_point() + geom_hline(yintercept=0.05,color="red") + ggtitle("Granger test results for each month") + facet_wrap(~year)
+
+# two plots
+sep13<-data[159:177,] # September 13
+p1 <- ggplot(sep13) + geom_line(aes(Day, log_daverage,group=1),colour = "blue") + theme_bw() + ggtitle("Sep 13") 
+p2 <- ggplot(sep13) + geom_line(aes(Day, returns, group=1),colour = "red") + geom_line(aes(Day, sp_returns, group=1),colour="green") + geom_line(aes(Day, difference, group=1),colour="black")+ theme_bw() %+replace%
+    theme(panel.background = element_rect(fill = NA))
+grid.newpage()
+grid.draw(draw(p1,p2))
+
+sep13<-data1[159:177,] # September 13 (negative returns)
+p1 <- ggplot(sep13, aes(Day, log_daverage,group=1)) + geom_line(colour = "blue") + theme_bw() + ggtitle("Sep 13")
+p2 <- ggplot(sep13, aes(Day, neg_returns, group=1)) + geom_line(colour = "red") + theme_bw() %+replace%
+    theme(panel.background = element_rect(fill = NA))
+grid.newpage()
+grid.draw(draw(p1,p2))
+
+mar13<-data[36:56,] # March 13
+p1 <- ggplot(mar13, aes(Day, log_daverage,group=1)) + geom_line(colour = "blue") + theme_bw() + ggtitle("March 13")
+p2 <- ggplot(mar13, aes(Day, returns,group=1)) + geom_line(colour = "red") + theme_bw() %+replace%
+    theme(panel.background = element_rect(fill = NA))
+grid.newpage()
+grid.draw(draw(p1,p2))
+
+mar13<-data[36:56,] # March 13
+p1 <- ggplot(mar13, aes(Day, log_daverage,group=1)) + geom_line(colour = "blue") + theme_bw()
+p2 <- ggplot(mar13, aes(Day, difference, group=1)) + geom_line(colour = "red") + theme_bw() %+replace%
+    theme(panel.background = element_rect(fill = NA))
+grid.newpage()
+grid.draw(draw(p1,p2))
+
+feb15<-data[504:518,] #Feb15
+p1 <- ggplot(feb15, aes(Day, log_daverage,group=1)) + geom_line(colour = "blue") + theme_bw()
+p2 <- ggplot(feb15, aes(Day, returns,group=1)) + geom_line(colour = "red") + theme_bw() %+replace%
+    theme(panel.background = element_rect(fill = NA))
+grid.newpage()
+grid.draw(draw(p1,p2)) 
+
+library(knitr)
+Year<-c("2013","2014","2015")
+ADFtest<-rep("stationary",3)
+Lag<-c(1:3)
+Granger<-c("significant","not significant","not significant")
+b<-data.frame(Year,ADFtest,Lag,Granger)
+kable(head(b),align="c") 
+
